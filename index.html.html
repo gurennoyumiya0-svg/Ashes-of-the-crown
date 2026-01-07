@@ -1,0 +1,220 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ashes of the Crown</title>
+<style>
+body { margin:0; background:#000; touch-action:none; }
+canvas { display:block; margin:auto; background:#111; }
+#ui {
+  position:fixed; bottom:10px; left:50%;
+  transform:translateX(-50%);
+  display:flex; gap:10px;
+}
+button {
+  background:#222; color:#ccc;
+  border:1px solid #555; padding:8px 12px;
+}
+#dialog {
+  position:fixed; bottom:80px; left:50%;
+  transform:translateX(-50%);
+  width:90%; max-width:400px;
+  background:rgba(0,0,0,0.8);
+  color:#ddd; padding:10px;
+  display:none;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game" width="360" height="640"></canvas>
+
+<div id="dialog"></div>
+
+<div id="ui">
+  <button onclick="attack()">ATK</button>
+  <button onclick="dodge()">DODGE</button>
+  <button onclick="interact()">TALK</button>
+</div>
+
+<script>
+// ======================
+// CORE
+// ======================
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const dialog = document.getElementById("dialog");
+const keys = {};
+let scene = "field";
+
+// ======================
+// SAVE / LOAD
+// ======================
+let save = JSON.parse(localStorage.getItem("ashes-save")) || {
+  hp:100,
+  maxHp:100,
+  flags:{},
+  scene:"field"
+};
+
+// ======================
+// PLAYER
+// ======================
+const player = {
+  x:180,y:400,r:10,
+  speed:2,
+  hp:save.hp,
+  stamina:100
+};
+
+// ======================
+// NPC
+// ======================
+const npc = {
+  x:180,y:200,r:10,
+  dialog:[
+    "The crown still bleeds.",
+    "Will you claim it… or end it?",
+  ]
+};
+
+// ======================
+// BOSS
+// ======================
+const boss = {
+  x:180,y:120,r:18,
+  hp:120,
+  active:false
+};
+
+// ======================
+// INPUT
+// ======================
+window.addEventListener("keydown",e=>keys[e.key]=true);
+window.addEventListener("keyup",e=>keys[e.key]=false);
+
+// ======================
+// ACTIONS
+// ======================
+function attack(){
+  let target = scene==="boss" ? boss : null;
+  if(!target) return;
+  let d=Math.hypot(target.x-player.x,target.y-player.y);
+  if(d<30 && target.hp>0) target.hp-=10;
+}
+function dodge(){
+  if(player.stamina<20) return;
+  player.y+=40;
+  player.stamina-=20;
+}
+function interact(){
+  let d=Math.hypot(npc.x-player.x,npc.y-player.y);
+  if(d<25 && scene==="field"){
+    dialog.style.display="block";
+    dialog.innerHTML = npc.dialog.join("<br><br>") +
+    `<br><br>
+    <button onclick="choose('claim')">Claim the Crown</button>
+    <button onclick="choose('destroy')">Destroy it</button>`;
+  }
+}
+function choose(c){
+  save.flags.choice=c;
+  dialog.style.display="none";
+  scene="boss";
+  boss.active=true;
+}
+
+// ======================
+// LOOP
+// ======================
+function update(){
+  if(keys["w"]) player.y-=player.speed;
+  if(keys["s"]) player.y+=player.speed;
+  if(keys["a"]) player.x-=player.speed;
+  if(keys["d"]) player.x+=player.speed;
+
+  if(scene==="boss" && boss.hp>0){
+    let dx=player.x-boss.x;
+    let dy=player.y-boss.y;
+    let d=Math.hypot(dx,dy);
+    if(d>25){
+      boss.x+=dx/d;
+      boss.y+=dy/d;
+    } else {
+      player.hp-=0.2;
+    }
+  }
+
+  if(boss.hp<=0 && boss.active){
+    endGame();
+  }
+
+  player.stamina=Math.min(100,player.stamina+0.1);
+}
+
+function draw(){
+  ctx.clearRect(0,0,360,640);
+
+  // world
+  ctx.fillStyle="#111";
+  ctx.fillRect(0,0,360,640);
+
+  // npc
+  if(scene==="field"){
+    ctx.fillStyle="#666";
+    ctx.beginPath();
+    ctx.arc(npc.x,npc.y,npc.r,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // boss
+  if(scene==="boss" && boss.hp>0){
+    ctx.fillStyle="#7a1f1f";
+    ctx.beginPath();
+    ctx.arc(boss.x,boss.y,boss.r,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // player
+  ctx.fillStyle="#ccc";
+  ctx.beginPath();
+  ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+  ctx.fill();
+
+  // UI
+  bar(10,10,player.hp,save.maxHp,"HP","#a33");
+  bar(10,25,player.stamina,100,"ST","#39a");
+}
+
+function bar(x,y,v,m,l,c){
+  ctx.fillStyle="#222";
+  ctx.fillRect(x,y,100,8);
+  ctx.fillStyle=c;
+  ctx.fillRect(x,y,(v/m)*100,8);
+}
+
+// ======================
+// ENDING
+// ======================
+function endGame(){
+  localStorage.setItem("ashes-save",JSON.stringify(save));
+  alert(
+    save.flags.choice==="claim"
+    ? "You sit upon the throne. The world kneels."
+    : "The crown is gone. The cycle breaks."
+  );
+  boss.active=false;
+}
+
+// ======================
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
